@@ -5,12 +5,6 @@ My personal deeplearning experiment framework for pytorch.
 
 You can use as your wish, but I am too lazy and busy to provide documentation.
 
-## News
-+ April 14, 2025: support model activation checkpoint, better dataset integration
-+ April 02, 2025: support evaluator offline and online
-+ April 01, 2025: support base model based on nn.Module, PretrainedModel, and PretrainedModelConfig
-+ March 11, 2025: support experiment dataset integration based on datasets
-
 ## Environment
 Need to install the following packages:
 + [x] pytorch

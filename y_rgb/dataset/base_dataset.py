@@ -19,6 +19,8 @@ class BaseDataset(ABC):
         process_fn: Optional[Callable[[Dict], Dict]] = None,
         filter_fn: Optional[Callable[[Dict], bool]] = None,
         process_first: bool = True,
+        process_batched: bool = True,
+        filter_batched: bool = True,
         process_bs: int = 1,
         filter_bs: int = 1,
         metadata: Optional[Dict] = None,
@@ -40,6 +42,8 @@ class BaseDataset(ABC):
         self.process_fn = process_fn or (lambda x: x)
         self.filter_fn = filter_fn or (lambda x: True)
         self.process_first = process_first
+        self.process_batched = process_batched
+        self.filter_batched = filter_batched
         self.process_bs = process_bs
         self.filter_bs = filter_bs
         self.metadata = metadata or {}
@@ -60,7 +64,7 @@ class BaseDataset(ABC):
         :return:
         """
         if isinstance(self.dataset, DatasetDict):
-            assert split is None, "split should be specified when dataset is a DatasetDict."
+            assert split is not None, "split should be specified when dataset is a DatasetDict."
             dataset = self.dataset[split]
         elif isinstance(self.dataset, (Dataset, IterableDataset)):
             dataset = self.dataset
@@ -85,6 +89,7 @@ class BaseDataset(ABC):
         if transform_fn is not None:
             dataset.set_transform(transform_fn)
         else:
+            # 源码：相当于隐式dataset.set_transform("torch")
             dataset = dataset.with_format("torch")
         return DataLoader(
             dataset,
@@ -99,20 +104,21 @@ class BaseDataset(ABC):
 
 
     def _prepare_data(self):
-        def _map_filter(dataset, process_fn, filter_fn):
+        def map_filter(dataset, process_fn, filter_fn, process_batched, filter_batched):
             if self.process_first:
-                return dataset.map(process_fn, batched=True, batch_size = self.process_bs)\
-                              .filter(filter_fn, batched=True, batch_size = self.filter_bs)
+                return dataset.map(process_fn, batched=process_batched, batch_size = self.process_bs)\
+                              .filter(filter_fn, batched=filter_batched, batch_size = self.filter_bs)
             else:
-                return dataset.filter(filter_fn, batched=True, batch_size = self.filter_bs)\
-                              .map(process_fn, batched=True, batch_size = self.process_bs)
+                return dataset.filter(filter_fn, batched=process_batched, batch_size = self.filter_bs)\
+                              .map(process_fn, batched=filter_batched, batch_size = self.process_bs)
 
         if isinstance(self.dataset, (Dataset, IterableDataset)):
             assert not isinstance(self.process_fn, dict), ("process_fn is a dict, but dataset is a single dataset. "
                                                            "process_fn should be a function or None.")
             assert not isinstance(self.filter_fn, dict),("filter_fn is a dict, but dataset is a single dataset."
                                                          "filter_fn should be a function or None.")
-            self.dataset = _map_filter(self.dataset, self.process_fn, self.filter_fn)
+            self.dataset = map_filter(self.dataset, self.process_fn, self.filter_fn,
+                                       self.process_batched, self.filter_batched)
 
         elif isinstance(self.dataset, DatasetDict):
             # 如果process_fn和filter_fn是函数，转换为字典
@@ -128,7 +134,8 @@ class BaseDataset(ABC):
             for split in self.dataset.keys():
                 process_fn = self.process_fn.get(split, None)
                 filter_fn = self.filter_fn.get(split, None)
-                self.dataset[split] = _map_filter(self.dataset[split], process_fn, filter_fn)
+                self.dataset[split] = map_filter(self.dataset[split], process_fn, filter_fn,
+                                                  self.process_batched, self.filter_batched)
 
 
     def save_to_disk(self, path: str):

@@ -18,6 +18,7 @@ from typing import Callable, List, Optional, Union
 
 import torch
 import torch.distributed as dist
+from torch.utils.data.distributed import DistributedSampler
 from omegaconf import omegaconf
 from torch.cuda.amp import GradScaler
 
@@ -126,7 +127,7 @@ class Runner(RunnerBase):
             self.logger.critical(f"训练时，发生异常：{e.__class__.__name__},"
                                  f"异常信息：{e}")
             self.on_exception(e)
-            # raise
+            raise
         finally:
             self.after_train()
             self.after_all()
@@ -143,7 +144,8 @@ class Runner(RunnerBase):
         for batch_i, data in enumerate(self.train_data_loader):
             registry.register("current_batch", batch_i)
             self.before_running_batch()
-            self.train_data_loader.sampler.set_epoch(current_epoch)
+            if isinstance(self.train_data_loader.sampler, DistributedSampler):
+                self.train_data_loader.sampler.set_epoch(current_epoch)
             data = self._move_train_data_to_device(data)
             with self.maybe_autocast(is_fp16):
                 model_output, _ = self.train_step(data)
@@ -313,7 +315,11 @@ class Runner(RunnerBase):
 
 
     def test_step(self, batch) -> dict:
-        model_output = self.model.module.generate(**batch)
+        if hasattr(self.model, "module"):
+            # deepspeed or DDP
+            model_output = self.model.module.generate(**batch)
+        else:
+            model_output = self.model.generate(**batch)
         self.test_evaluator.process(model_output, batch) \
                         if self.test_evaluator else None
         return model_output
@@ -325,7 +331,7 @@ class Runner(RunnerBase):
         self.logger.info(registry.get("start_msg"))
         if registry.get("cfg.training.print_model", True):
             # support distributed print, means print only once in the main process
-            print(registry.get("model_info"))
+            self.logger.just_print(registry.get("model_info"))
 
 
 
@@ -358,7 +364,7 @@ class Runner(RunnerBase):
         # 有的话就用已创建的，忽略参数
         # 没有的话就会用这些参数创建
         self.logger = Logger.get_instance(
-            "logger",
+            "runner",
             # **dict(registry.get("cfg.log")),
             log_level = registry.get("cfg.log.log_level", 'INFO'),
             to_file = registry.get("cfg.log.to_file", True),
@@ -384,17 +390,30 @@ class Runner(RunnerBase):
 
 
     def _apply_launch_strategy(self):
+        """
+        根据设备数量、类型，自动判断单机、分布式并行、CPU
+        if 单机、CPU: python ./train.py
+        if 分布式: python -m torch.distributed.launch --nproc_per_node=4 ./train.py
+        :return:
+        """
         model_info = get_model_info(self.model)
         registry.register("model_info", model_info)
-        print(better_dict_4_print(self.runner_config))
+        self.logger.info("本次运行配置：\n" + better_dict_4_print(self.runner_config))
 
         # 单卡也使用分布式环境
         if torch.cuda.is_available():
             # if dist.is_available() and not dist.is_initialized():
             from ..dist.init import init_distributed_mode
             if not dist.is_initialized():
-                init_distributed_mode()
-            device = torch.device(f'cuda:{dist.get_rank()}')
+                num_gpus = torch.cuda.device_count()
+                if num_gpus > 1 or registry.get('cfg.training.ds_config') is not None:
+                    init_distributed_mode()
+
+            if dist.is_initialized():
+                device = torch.device(f'cuda:{dist.get_rank()}')
+            else:
+                device = torch.device('cuda:0')
+
             self._prepare_dataloader()
         else:
             device = torch.device('cpu')
@@ -408,35 +427,44 @@ class Runner(RunnerBase):
             self._set_scheduler()
             return
 
-        # 初始化分布式模型和优化器
         self.model = self.model.to(device)
-        ds_config = registry.get("cfg.training.ds_config")
-        if ds_config:
-            try:
-                import deepspeed
-            except ImportError:
-                raise ImportError("未安装deepspeed，无法使用deepspeed配置。"
-                                  "请运行以下命令安装：\n"
-                                  "pip install deepspeed")
-            self.model, self.optimizer, _, _ = deepspeed.initialize(
-                model = self.model,
-                optimizer = self.optimizer if self.optimizer is not None else None,
-                model_parameters = self.model.parameters(),
-                config = ds_config,
-            )
-            registry.register("start_msg", "使用deepspeed启动中...")
+        if dist.is_initialized():
+            # 初始化分布式模型和优化器
+            ds_config = registry.get("cfg.training.ds_config")
+            if ds_config:
+                try:
+                    import deepspeed
+                except ImportError:
+                    raise ImportError("未安装deepspeed，无法使用deepspeed配置。"
+                                      "请运行以下命令安装：\n"
+                                      "pip install deepspeed")
+                self.model, self.optimizer, _, _ = deepspeed.initialize(
+                    model = self.model,
+                    optimizer = self.optimizer if self.optimizer is not None else None,
+                    model_parameters = self.model.parameters(),
+                    config = ds_config,
+                )
+                registry.register("start_msg", "使用deepspeed启动中...")
+            else:
+                self.model = torch.nn.parallel.DistributedDataParallel(
+                    self.model,
+                    device_ids = [dist.get_rank()], output_device = dist.get_rank()
+                )
+                if self.optimizer is None:
+                    self.optimizer = torch.optim.AdamW(
+                        self.model.parameters(),
+                        lr = registry.get("cfg.optimizer.lr", 3e-4),
+                        weight_decay= registry.get("cfg.optimizer.weight_decay", 0.01),
+                    )
+                registry.register("start_msg", "使用torch.distributed启动中...")
         else:
-            self.model = torch.nn.parallel.DistributedDataParallel(
-                self.model,
-                device_ids = [dist.get_rank()], output_device = dist.get_rank()
-            )
             if self.optimizer is None:
                 self.optimizer = torch.optim.AdamW(
                     self.model.parameters(),
                     lr = registry.get("cfg.optimizer.lr", 3e-4),
                     weight_decay= registry.get("cfg.optimizer.weight_decay", 0.01),
                 )
-            registry.register("start_msg", "使用torch.distributed启动中...")
+            registry.register("start_msg", "使用单卡启动中...")
 
         self._set_scheduler()
 

@@ -84,7 +84,7 @@ class CheckpointCallback(BaseCallBack):
         self.topk_models: List[Dict] = []
         self.save_enabled = registry.get("is_main_process")
 
-        self.logger = Logger.get_instance("logger")
+        self.logger = Logger.get_instance("runner")
 
 
     @staticmethod
@@ -147,7 +147,6 @@ class CheckpointCallback(BaseCallBack):
         if not registry.get("is_main_process", True):
             return
 
-        name += '.pt'
         # 创建保存目录（如果不存在）
         os.makedirs(self.folder, exist_ok = True)
 
@@ -299,6 +298,8 @@ class CheckpointCallback(BaseCallBack):
         if batch is not None:
             base += f"-batch_{batch + 1}"
         filename = f"{base}-{self.monitor}_{value:.4f}"
+        if not self.is_deepspeed:
+            filename += '.pt'
         return filename
 
 
@@ -325,9 +326,9 @@ class CheckpointCallback(BaseCallBack):
             removed = self.topk_models.pop()
             try:
                 if os.path.isdir(removed["path"]):
-                    shutil.rmtree(removed["path"])  # 删除目录
+                    shutil.rmtree(removed["path"])
                 else:
-                    os.remove(removed["path"])  # 删除文件
+                    os.remove(removed["path"])
                 self.logger.info(f"TopK移除旧模型: {os.path.basename(removed['path'])}")
             except FileNotFoundError:
                 self.logger.warning(f"文件未找到: {removed['path']}")
@@ -345,7 +346,6 @@ class CheckpointCallback(BaseCallBack):
             shutil.copytree(best_source, best_dest)
             self.logger.info(f"DeepSpeed最佳模型更新至: {best_dest}")
         else:
-            best_source += '.pt'
             best_dest = os.path.join(self.folder, "best.pt")
             shutil.copyfile(best_source, best_dest)
             self.logger.info(f"标准最佳模型更新至: {best_dest}")
