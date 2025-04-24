@@ -22,7 +22,7 @@ class BaseCallBack:
         """
         Called when the callback is registered.
         """
-        self.logger = Logger.get_instance("logger")
+        self.logger = Logger.get_instance("runner")
         self.logger.info(f"Callback {self.__class__.__name__} registered.")
 
     def on_exception(self, *args, **kwargs):

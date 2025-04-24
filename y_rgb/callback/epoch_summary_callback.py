@@ -11,7 +11,7 @@ class EpochSummaryCallBack(BaseCallBack):
         super().__init__()
         self._epoch_start_time = None
         self._epoch_end_time = None
-        self.logger = Logger.get_instance("logger")
+        self.logger = Logger.get_instance("runner")
 
     def before_running_epoch(self):
         self._epoch_start_time = datetime.now()

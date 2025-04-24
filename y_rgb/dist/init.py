@@ -79,12 +79,23 @@ def init_distributed_mode(args=None):
 
     torch.cuda.set_device(args.gpu)
     args.dist_backend = "nccl"
-    print(
-        "| distributed init (rank {}, world {}): {}".format(
-            args.rank, args.world_size, args.dist_url
-        ),
-        flush=True,
-    )
+
+    try:
+        from ..common.logger import Logger
+        logger = Logger.get_current_instance()
+    except Exception as e:
+        print(
+            "Distributed Launching: init (rank {}, world {}): {}".format(
+                args.rank, args.world_size, args.dist_url
+            ),
+            flush = True,
+        )
+    else:
+        logger.info(
+            "Distributed Launching: init (rank {}, world {}): {}".format(
+                args.rank, args.world_size, args.dist_url
+            )
+        )
     torch.distributed.init_process_group(
         backend=args.dist_backend,
         init_method=args.dist_url,

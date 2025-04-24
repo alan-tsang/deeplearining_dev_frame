@@ -33,7 +33,7 @@ class ProcessCallBack(BaseCallBack):
         super().on_register()
         self.every_n_batches = registry.get("cfg.training.progress_every_n_batches", 1)
         self.every_n_epoch = registry.get("cfg.training.progress_every_n_epochs", 1)
-        self.logger = Logger.get_instance("logger")
+        self.logger = Logger.get_instance("runner")
 
 
     # def after_running_epoch(self):

@@ -192,7 +192,7 @@ class DumpResults(BaseMetric, ABC):
         with open(out_file, 'wb') as f:
             pickle.dump(results, f)
 
-        Logger.get_instance("logger").info(f'Results saved to {out_file}.')
+        Logger.get_instance("runner").info(f'Results saved to {out_file}.')
         return {}
 
 
