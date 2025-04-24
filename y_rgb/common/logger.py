@@ -11,9 +11,8 @@ from ..common.util import now
 
 
 class CustomFormatter(logging.Formatter):
-    """自定义 Formatter，支持动态控制换行符"""
     def __init__(self, fmt: Optional[str] = None, datefmt: Optional[str] = None):
-        fmt = fmt or '[%(asctime)s] | [%(levelname)s] | [%(filename)s:%(lineno)d #%(funcName)s()] %(message)s'
+        fmt = fmt or '[%(asctime)s] | [%(levelname)s] | [%(filename)s:%(lineno)d:%(funcName)s()] %(message)s'
         super().__init__(fmt, datefmt)
 
 
@@ -115,5 +114,8 @@ class Logger(ManagerMixin):
         if time_stamp:
             obj = f"[{now()}] {obj}"
         print(obj, end=end, flush=True)
+        if to_file is None:
+            to_file = self.to_file
         if to_file and self._file_handler:
             self._file_handler.stream.write(f"{obj}{end}")
+            self._file_handler.stream.flush()
