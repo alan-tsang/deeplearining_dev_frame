@@ -1,6 +1,6 @@
 import wandb
 from omegaconf import OmegaConf
-# from .runner_config import RunnerConfig
+
 
 def load_cfg(path):
     base_cfg = OmegaConf.load(path)
@@ -39,6 +39,8 @@ def load_cfg(path):
     """
     if is_sweep:
         wandb.config.update(dict(cfg))
-    # return RunnerConfig(**cfg)
-    # maybe not necessary
+
     return cfg
+    # from .runner_config import RunnerConfig
+    # return RunnerConfig(**cfg)
+

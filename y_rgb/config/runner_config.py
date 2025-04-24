@@ -1,5 +1,8 @@
-"""RunnerConfig: for aspect parameters of the whole runner based on pydantic
-not use anymore, because it will
+"""RunnerConfig:
+for aspect parameters of the whole runner based on pydantic
+and provide default values
+
+Not used anymore, I think it will limit flexibility.
 """
 from typing import Dict, List
 
@@ -49,7 +52,7 @@ class PtConfig(BaseModel):
     pt_best_monitor: Dict[str, bool] = {"loss": False}
     pt_topk: int = 3
     pt_save_n_epochs: int = 1
-    # pt_save_n_batches: int = 1000
+    pt_save_n_batches: int | None = None
 
 class LogConfig(BaseModel):
     to_file: bool = True
@@ -63,5 +66,5 @@ class RunnerConfig(BaseModel):
     pt: PtConfig = Field(default_factory=PtConfig)
     scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
     optimizer: OptimizerConfig = Field(default_factory=OptimizerConfig)
-    run_name: str = "experiment_01"
+    run_name: str = ""
     run_description: str = ""
