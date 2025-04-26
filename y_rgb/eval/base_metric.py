@@ -127,7 +127,7 @@ class BaseMetric(metaclass=ABCMeta):
 
         if is_main_process():
             # cast all tensors in results list to cpu
-            results = _to_cpu(results)
+            results = self.to_cpu(results)
             _metrics = self.compute_metrics(results)  # type: ignore
             # Add prefix to metric names
             if self.prefix:
@@ -144,6 +144,21 @@ class BaseMetric(metaclass=ABCMeta):
         # reset the results list
         self.results.clear()
         return metrics[0]
+
+
+    def to_cpu(self, data: Any) -> Any:
+        """Transfer all tensors to cpu."""
+        if isinstance(data, Tensor):
+            return data.to('cpu')
+        elif isinstance(data, list):
+            return [self.to_cpu(d) for d in data]
+        elif isinstance(data, tuple):
+            return tuple(self.to_cpu(d) for d in data)
+        elif isinstance(data, dict):
+            return {k: self.to_cpu(v) for k, v in data.items()}
+        else:
+            return data
+
 
 
 @registry.register_metric("DumpResults")
@@ -194,18 +209,3 @@ class DumpResults(BaseMetric, ABC):
 
         Logger.get_instance("runner").info(f'Results saved to {out_file}.')
         return {}
-
-
-
-def _to_cpu(data: Any) -> Any:
-    """Transfer all tensors to cpu."""
-    if isinstance(data, Tensor):
-        return data.to('cpu')
-    elif isinstance(data, list):
-        return [_to_cpu(d) for d in data]
-    elif isinstance(data, tuple):
-        return tuple(_to_cpu(d) for d in data)
-    elif isinstance(data, dict):
-        return {k: _to_cpu(v) for k, v in data.items()}
-    else:
-        return data

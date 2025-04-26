@@ -124,10 +124,15 @@ class Runner(RunnerBase):
                 self.test()
                 self.after_running_epoch()
         except BaseException as e:
-            self.logger.critical(f"训练时，发生异常：{e.__class__.__name__},"
-                                 f"异常信息：{e}")
+            import traceback
+            error_trace = traceback.format_exc()  # 获取完整堆栈字符串
+            self.logger.critical(
+                f"训练崩溃！异常类型：{e.__class__.__name__}\n"
+                f"异常信息：{str(e)}\n"
+                f"完整堆栈：\n{error_trace}"
+            )
             self.on_exception(e)
-            raise
+            # raise
         finally:
             self.after_train()
             self.after_all()

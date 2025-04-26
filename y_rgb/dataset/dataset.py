@@ -1,6 +1,6 @@
 import os
 from typing import Sequence, Union, Optional, Callable, List, Dict, Any
-from datasets import Dataset, DatasetDict, IterableDataset, load_dataset
+from datasets import Dataset, DatasetDict, IterableDataset, load_dataset, load_from_disk
 import warnings
 
 from .base_dataset import BaseDataset
@@ -16,6 +16,8 @@ class BaseMapDataset(BaseDataset):
         process_fn: Optional[Union[Dict[str, Callable], Callable[..., Any]]] = None,
         filter_fn: Optional[Union[Dict[str, Callable], Callable[..., Any]]] = None,
         process_first: bool = True,
+        process_batched: bool = True,
+        filter_batched: bool = True,
         process_bs: int = 1,
         filter_bs: int = 1,
         metadata: Optional[Dict] = None,
@@ -29,6 +31,8 @@ class BaseMapDataset(BaseDataset):
             process_fn,
             filter_fn,
             process_first,
+            process_batched,
+            filter_batched,
             process_bs,
             filter_bs,
             metadata,
@@ -56,7 +60,7 @@ class BaseMapDataset(BaseDataset):
             """return a Dataset object"""
             if os.path.exists(data_source):
                 if os.path.isdir(data_source):
-                    self.dataset = load_dataset(data_source)
+                    self.dataset = load_from_disk(data_source)
                 else:
                     if data_format is None:
                         data_format = infer_data_format(data_source)
@@ -181,6 +185,8 @@ class BaseIterableDataset(BaseDataset):
         process_fn: Optional[Union[Dict[str, Callable], Callable[..., Any]]] = None,
         filter_fn: Optional[Union[Dict[str, Callable], Callable[..., Any]]] = None,
         process_first: bool = True,
+        process_batched: bool = True,
+        filter_batched: bool = True,
         process_bs: int = 1,
         filter_bs: int = 1,
         metadata: Optional[Dict] = None,
@@ -193,6 +199,8 @@ class BaseIterableDataset(BaseDataset):
             process_fn,
             filter_fn,
             process_first,
+            process_batched,
+            filter_batched,
             process_bs,
             filter_bs,
             metadata,
